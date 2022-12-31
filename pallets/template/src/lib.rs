@@ -27,6 +27,8 @@ pub mod pallet {
 		ClaimCreated { who: T::AccountId, claim: T::Hash },
 		/// Event emitted when a claim is revoked by the owner.
 		ClaimRevoked { who: T::AccountId, claim: T::Hash },
+		/// Event emitted when a claim has been transferred.
+		ClaimTransferred { who: T::AccountId, claim: T::Hash, to: T::AccountId },
 	}
 	#[pallet::error]
 	pub enum Error<T> {
@@ -83,6 +85,32 @@ pub mod pallet {
 
 			// Emit an event that the claim was erased.
 			Self::deposit_event(Event::ClaimRevoked { who: sender, claim });
+			Ok(())
+		}
+
+		#[pallet::weight(0)]
+		pub fn transfer_claim(
+			origin: OriginFor<T>,
+			claim: T::Hash,
+			to: T::AccountId,
+		) -> DispatchResult {
+			// Check that the extrinsic was signed and get the signer.
+			// This function will return an error if the extrinsic is not signed.
+			let sender = ensure_signed(origin)?;
+
+			// Get owner of the claim, if none return an error.
+			let (owner, _) = Claims::<T>::get(&claim).ok_or(Error::<T>::NoSuchClaim)?;
+
+			// Verify that sender of the current call is the claim owner.
+			ensure!(sender == owner, Error::<T>::NotClaimOwner);
+
+			// Get the block number from the FRAME System pallet.
+			let current_block = <frame_system::Pallet<T>>::block_number();
+
+			Claims::<T>::insert(&claim, (&to, current_block));
+
+			// Emit an event that the claim was erased.
+			Self::deposit_event(Event::ClaimTransferred { who: sender, claim, to });
 			Ok(())
 		}
 	}
